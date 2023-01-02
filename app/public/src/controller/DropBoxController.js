@@ -160,11 +160,23 @@ class DropBoxController {
 
             this.uploadTask(event.target.files).then(responses => {
 
-                responses.forEach(resp => {
+                // responses.forEach(resp => {
 
-                    this.getFirebaseRef().push().set(resp.files['input-file']);
+                //     this.getFirebaseRef().push().set(resp.files['input-file']);
+
+                // });
+                responses.forEach(resp => {
+                    resp.ref.getDownloadURL().then(data=>{
+                        this.getFirebaseRef().push().set({
+                            name: resp.name,
+                            type: resp.contentType,
+                            path: data,
+                            size: resp.size
+                        });
+                    })
 
                 });
+                console.log('responses', responses);
 
                 this.uploadComplete();
 
@@ -246,17 +258,53 @@ class DropBoxController {
 
         [...files].forEach(file => {
 
-            let formData = new FormData();
+            // let formData = new FormData();
 
-            formData.append('input-file', file);
+            // formData.append('input-file', file);
 
-            promisses.push(this.ajax('/upload', 'POST', formData, (event) => {
+            // promisses.push(this.ajax('/upload', 'POST', formData, (event) => {
 
-                this.uploadProgress(event, file);
+            //     this.uploadProgress(event, file);
 
-            }, () => {
+            // }, () => {
 
-                this.startUploadTime = Date.now();
+            //     this.startUploadTime = Date.now();
+
+            // }));
+
+            promisses.push(new Promise((resolve, reject) => {
+
+                let fileRef = firebase.storage().ref(this.currentFolder.join('/')).child(file.name);
+
+                let task = fileRef.put(file);
+
+                task.on('state_changed', snapshot => {
+
+                    this.uploadProgress({
+
+                        loaded:snapshot.bytesTransferred,
+                        total:snapshot.totalBytes
+
+                    }, file);
+
+                }, error => {
+
+                    console.error(error);
+                    reject(error);
+
+                }, () => {
+
+                    fileRef.getMetadata().then(metadata=>{
+
+                        resolve(metadata);
+
+                    }).catch(err=>{
+
+                        reject(err);
+
+                    });
+
+                });
 
             }));
 
@@ -302,8 +350,8 @@ class DropBoxController {
 
     getFileIconView(file) {
 
-        switch (file.mimetype) {
-
+        // switch (file.mimetype) {
+        switch (file.type) {
             case 'folder':
                 return `
                     <svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
@@ -477,9 +525,14 @@ class DropBoxController {
         li.dataset.key = key;
         li.dataset.file = JSON.stringify(file);
 
+        // li.innerHTML = `
+        //     ${this.getFileIconView(file)}
+        //     <div class="name text-center">${file.originalFilename}</div>
+        // `
+
         li.innerHTML = `
             ${this.getFileIconView(file)}
-            <div class="name text-center">${file.originalFilename}</div>
+            <div class="name text-center">${file.name}</div>
         `
 
         this.initEventsLi(li);
@@ -497,12 +550,12 @@ class DropBoxController {
             this.listFilesEl.innerHTML = '';
 
             snapshot.forEach(snapshotItem => {
-
                 let key = snapshotItem.key;
                 let data = snapshotItem.val();
-
+                
                 //console.log(key, data);
-                if (data.mimetype) {
+                // if (data.mimetype) {
+                if (data.type) {
                     this.listFilesEl.appendChild(this.getFileView(data, key));
                 }
 
@@ -548,24 +601,24 @@ class DropBoxController {
                     </svg>
                 `;
 
-                
+
             }
-            
+
             nav.appendChild(span);
 
         }
 
         this.navEl.innerHTML = nav.innerHTML;
 
-        this.navEl.querySelectorAll('a').forEach(a=>{
+        this.navEl.querySelectorAll('a').forEach(a => {
 
-            a.addEventListener('click', e=>{
+            a.addEventListener('click', e => {
 
                 e.preventDefault();
 
                 this.currentFolder = a.dataset.path.split('/');
 
-                this.openFolder();                
+                this.openFolder();
 
             })
 
